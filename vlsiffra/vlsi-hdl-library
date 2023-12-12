@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+
+import argparse
+import pathlib
+
+from amaranth.back import verilog
+
+import vlsiffra
+from vlsiffra.tech import asap7
+from vlsiffra.tech import sky130
+from vlsiffra.tech import gf180mcu
+from vlsiffra.tech import none
+
+from vlsiffra import adder
+# from vlsiffra import multiplier
+
+processes = [
+    asap7.ASAP7Process,
+    sky130.SKY130HSProcess,
+    sky130.SKY130HDProcess,
+    sky130.SKY130HVLProcess,
+    gf180mcu.GF180MCUProcess,
+    none.NoneProcess
+]
+
+algorithms = [
+    adder.BrentKung,
+    adder.KoggeStone,
+    adder.HanCarlson,
+    adder.Inferred,
+    adder.Ripple,
+]
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Create Verilog Adder Library')
+
+    parser.add_argument('--output', type=str,
+                        help='Write the library output into this directory')
+
+    args = parser.parse_args()
+
+
+    top_dir = pathlib.Path(args.output) / 'library'
+    if not top_dir.exists():
+        top_dir.mkdir()
+
+    vlsiffra_dir = pathlib.Path(vlsiffra.__file__).parent
+
+    for process in processes:
+        process_name = process.__name__.replace('Process', '').lower()
+
+        process_dir = top_dir / process_name
+        if not process_dir.exists():
+            process_dir.mkdir()
+        assert process_dir.is_dir(), process_dir
+
+        for algo in algorithms:
+            algo_name = algo.__name__.lower()
+
+            class ModGenerator(process, algo):
+                pass
+
+            filename = top_dir / process_name / (algo_name + '.v')
+            print('Generating', filename)
+            with open(filename, 'w') as f:
+                for i in range(1, 64):
+                    mod = ModGenerator(bits=i)
+                    output = verilog.convert(mod, ports=[mod.a, mod.b, mod.o], name="add_b%02i" % i)
+                    output = output.replace(str(vlsiffra_dir) + '/', '')
+                    f.write('\n/* ')
+                    f.write('-' * 75)
+                    f.write(' */\n')
+                    f.write(output)
